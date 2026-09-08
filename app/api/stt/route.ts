@@ -55,9 +55,48 @@ export async function POST(request: Request) {
         { error: 'Provide an audio file, word, and wordId.' },
         { status: 400 },
       );
-    // TODO: Pass audio to your STT provider here. No transcription or storage yet.
+    const purpose = data.get('purpose') ?? 'practice';
+    if (purpose !== 'greeting' && purpose !== 'practice')
+      return Response.json(
+        { error: 'Unknown recording purpose.' },
+        { status: 400 },
+      );
+    if (purpose === 'greeting') {
+      // TODO: Optional enrollment with your future adaptation provider.
+      // The client retains the sample for this session; nothing is persisted here.
+      return Response.json(
+        { status: 'received', purpose, bytes: audio.size },
+        { status: 202 },
+      );
+    }
+    const referenceAudio = data.get('referenceAudio');
+    const referenceText = data.get('referenceText');
+    if (
+      !(referenceAudio instanceof File) ||
+      !referenceAudio.size ||
+      !referenceAudio.type.startsWith('audio/') ||
+      typeof referenceText !== 'string' ||
+      !referenceText.trim() ||
+      referenceText.length > 200
+    )
+      return Response.json(
+        {
+          error:
+            'Record your greeting first. A reference audio file and text are required.',
+        },
+        { status: 400 },
+      );
+    // TODO: Send audio + referenceAudio + referenceText to an STT provider
+    // that supports voice adaptation. No recognition, adaptation, or storage yet.
     return Response.json(
-      { status: 'received', transcript: null, wordId, bytes: audio.size },
+      {
+        status: 'received',
+        transcript: null,
+        wordId,
+        bytes: audio.size,
+        referenceReceived: true,
+        adaptationStatus: 'not_configured',
+      },
       { status: 202 },
     );
   } catch {

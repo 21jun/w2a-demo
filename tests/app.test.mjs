@@ -23,6 +23,13 @@ test('accepts audio and leaves transcription empty', async () => {
   );
   data.append('word', '안녕');
   data.append('wordId', '1');
+  data.append('purpose', 'practice');
+  data.append(
+    'referenceAudio',
+    new Blob(['greeting'], { type: 'audio/webm' }),
+    'greeting.webm',
+  );
+  data.append('referenceText', 'Hello');
   const response = await POST(
     new Request('http://localhost/api/stt', { method: 'POST', body: data }),
   );
@@ -32,6 +39,8 @@ test('accepts audio and leaves transcription empty', async () => {
     transcript: null,
     wordId: '1',
     bytes: 6,
+    referenceReceived: true,
+    adaptationStatus: 'not_configured',
   });
 });
 test('rejects missing audio, incorrect media, and oversized uploads', async () => {
@@ -68,4 +77,48 @@ test('rejects missing audio, incorrect media, and oversized uploads', async () =
     ).status,
     413,
   );
+});
+
+test('accepts greeting enrollment without claiming adaptation', async () => {
+  const data = new FormData();
+  data.append(
+    'audio',
+    new Blob(['hello'], { type: 'audio/mp4' }),
+    'greeting.mp4',
+  );
+  data.append('word', 'Hello');
+  data.append('wordId', 'greeting');
+  data.append('purpose', 'greeting');
+  const response = await POST(
+    new Request('http://localhost/api/stt', { method: 'POST', body: data }),
+  );
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), {
+    status: 'received',
+    purpose: 'greeting',
+    bytes: 5,
+  });
+});
+test('requires a usable greeting reference for word practice', async () => {
+  for (const reference of [
+    null,
+    new Blob([], { type: 'audio/webm' }),
+    new Blob(['bad'], { type: 'text/plain' }),
+  ]) {
+    const data = new FormData();
+    data.append(
+      'audio',
+      new Blob(['word'], { type: 'audio/webm' }),
+      'word.webm',
+    );
+    data.append('word', '하늘');
+    data.append('wordId', '1');
+    data.append('purpose', 'practice');
+    if (reference) data.append('referenceAudio', reference, 'greeting.webm');
+    data.append('referenceText', '안녕');
+    const response = await POST(
+      new Request('http://localhost/api/stt', { method: 'POST', body: data }),
+    );
+    assert.equal(response.status, 400);
+  }
 });

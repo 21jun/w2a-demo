@@ -435,3 +435,66 @@ footer span {
     padding: 12px;
   }
 }
+.greeting-choices {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: -9px 0 24px;
+}
+.greeting-choice {
+  height: 38px;
+  min-width: 90px;
+  color: #6380a8;
+  background: white;
+  border: 1px solid #dce5f3;
+}
+.greeting-choice.selected {
+  color: #285dce;
+  border-color: #80a4ec;
+  background: #f0f5ff;
+}
+.greeting-bottom {
+  border-top: 1px solid #edf1f7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 24px 25px;
+  gap: 14px;
+}
+.greeting-bottom p {
+  font-size: 14px;
+  color: #8191a9;
+  text-align: center;
+  margin: 0;
+}
+.continue-button {
+  height: 44px;
+  padding: 0 18px;
+  gap: 10px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+.voice-reference {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 15px 8px 0;
+  color: #6580a4;
+  font-size: 14px;
+}
+.voice-reference > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.voice-reference button {
+  font-size: 13px;
+  color: #527ab6;
+}
+@media (max-width: 540px) {
+  .brand {
+    font-size: 23px;
+  }
+}

@@ -1,4 +1,4 @@
-# Sori — Korean speaking practice
+# Wake2Adapt — Voice practice
 
 Use Node.js 22.13+ (Node 24 recommended).
 
@@ -7,7 +7,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by the server. Microphone recording requires localhost or HTTPS. Allow microphone access, then hold the record button (mouse/touch) or Space and release to upload. If the permission dialog interrupts the first hold, hold again after allowing access. Recordings stop at 60 seconds, when the window loses focus, or when the tab is hidden. Audio playback is available after recording.
+Open the local URL printed by the server. First choose a greeting (안녕 or Hello), record it, then continue to word practice. You can listen back or re-record before continuing. Microphone recording requires localhost or HTTPS. Allow microphone access, then hold the record button (mouse/touch) or Space and release to upload. If the permission dialog interrupts the first hold, hold again after allowing access. Recordings stop at 60 seconds, when the window loses focus, or when the tab is hidden. Audio playback is available after recording.
 
 ## Word lists
 
@@ -17,7 +17,11 @@ JSON accepts an array of `{ "id": "1", "korean": "안녕하세요", "meaning": "
 
 ## STT integration
 
-`POST /api/stt` receives multipart fields `audio` (File), `word`, and `wordId`. The server validates uploads (10 MB limit) and returns HTTP 202 with `{ status: "received", transcript: null, wordId, bytes }`. Implement your STT provider in `app/api/stt/route.ts` at the TODO. No recognition is performed and audio is not stored. Keep future provider credentials on the server.
+`POST /api/stt` receives multipart fields `audio` (File), `word`, `wordId`, and `purpose` (`greeting` or `practice`). Greeting uploads are validated and acknowledged. After a successful greeting upload, the browser retains its Blob and text in React memory for the current session. Every practice upload includes `referenceAudio` (File) and `referenceText`. Missing or invalid references are rejected. The combined multipart upload limit is 10 MB.
+
+The greeting is not a continuously listening wake-word detector. Recording remains hold-to-record. The sample is sent with each practice request so a future STT provider can use it for adaptation. The server does not persist audio or train/adapt a model. Reloading or leaving the page clears the sample and starts setup again. “Record a new greeting” discards the old reference and requires a new recording.
+
+Practice responses return HTTP 202 with `{ status: "received", transcript: null, wordId, bytes, referenceReceived: true, adaptationStatus: "not_configured" }`. Implement your provider in `app/api/stt/route.ts` at the TODO. A provider must explicitly support reference-audio adaptation; supplying a greeting alone does not implement adaptation. Keep future provider credentials on the server.
 
 ```sh
 npm run build
