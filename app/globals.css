@@ -389,3 +389,29 @@ kbd {
     transition: none !important;
   }
 }
+
+.recording-format {
+  width: 100%;
+  max-width: 32rem;
+  text-align: left;
+  color: #58677c;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  margin: 0.75rem 0;
+}
+
+.recording-format summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.recording-format p {
+  margin: 0.75rem 0;
+}
+
+.recording-format pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: #f6f8fc;
+}

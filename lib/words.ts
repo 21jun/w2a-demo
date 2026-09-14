@@ -44,11 +44,19 @@ export function parseWords(text: string, filename: string): Word[] {
       ),
     );
   } else if (/\.json$/i.test(filename)) entries = JSON.parse(text);
-  else throw new Error('Choose a JSON or CSV file.');
+  else if (/\.jsonl$/i.test(filename))
+    entries = text
+      .split(/\r?\n/)
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line));
+  else throw new Error('Choose a JSON, JSONL or CSV file.');
   if (!Array.isArray(entries) || !entries.length || entries.length > 10000)
     throw new Error('Provide a list with 1–10,000 words.');
   return entries.map((item, i) => {
-    const value = typeof item === 'string' ? { korean: item } : item;
+    const value =
+      typeof item === 'string'
+        ? { korean: item }
+        : item && { ...item, korean: item.korean ?? item.text };
     if (
       !value ||
       typeof value.korean !== 'string' ||

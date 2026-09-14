@@ -12,9 +12,46 @@ Open the local URL printed by the server. First choose a greeting (안녕 or Hel
 
 ## Word lists
 
-Replace `public/words.json` for the default list, or use **Import words** to load JSON/CSV without changing the server. Examples are in `public/words.json` and `public/words.csv`.
+The default practice list loads directly from `data/roads_P001.jsonl`, using each row’s `text` as the practice word in file order. Edit this file to change the default list (rebuild for production). Empty `audioBase64` values are allowed for word lists; they do not set a voice reference. Set up your reference by recording or uploading audio as before.
+
+Use **Import words** to load JSON/JSONL/CSV for the current session. JSONL has one object per line, using `text` or `korean`, with optional `id` and `meaning`. Examples of the older formats remain in `public/words.json` and `public/words.csv`.
 
 JSON accepts an array of `{ "id": "1", "korean": "안녕하세요", "meaning": "Hello" }` or an array of strings. CSV uses `korean` with optional `id` and `meaning` columns. The importer supports quoted fields, commas, and UTF-8 BOMs.
+
+## Recording JSON uploads
+
+Both setup and word practice accept a JSON file through **Upload reference JSON** / **Upload recording JSON**, as an alternative to microphone recording. Open **JSON 포맷 안내** on either screen for the schema.
+
+Reference JSON (one UTF-8 object):
+
+```json
+{
+  "mimeType": "audio/wav",
+  "audioBase64": "<Base64 of the entire audio file>",
+  "text": "안녕"
+}
+```
+
+Practice JSON uses the same `mimeType` and `audioBase64` fields; omit `text`. It is attached to the currently displayed word and automatically sent with the saved reference. Reference `text` must match the spoken audio and contain 1–200 characters; it can be a greeting other than the preset choices.
+
+Replace the placeholder with standard Base64, including padding where needed, without a `data:` prefix, whitespace, or line breaks. Supported MIME values: `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/wav`, `audio/mpeg` (MP3). The MIME type must match the encoded audio file. Each JSON file is limited to 14 MiB; decoded audio is limited to 9 MiB total for the reference plus current recording, leaving room for multipart metadata within the API's 10 MiB request limit. The importer validates the JSON fields and Base64; playback depends on the browser's audio codec support.
+
+For example, create reference JSON from a WAV file using Python:
+
+```sh
+python3 - <<'PYTHON'
+import base64, json
+from pathlib import Path
+payload = {
+    "mimeType": "audio/wav",
+    "audioBase64": base64.b64encode(Path("reference.wav").read_bytes()).decode("ascii"),
+    "text": "안녕",
+}
+Path("reference.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+PYTHON
+```
+
+For a practice file, change the input/output filenames and omit `text`. Upload the reference first, then select **Start practice**. Imported audio supports the same playback and session-only reference handling as microphone recordings. The browser decodes the JSON into an audio Blob and submits the existing multipart API request; the API does not directly accept JSON bodies.
 
 ## STT integration
 

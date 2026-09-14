@@ -13,7 +13,12 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { parseWords, type Word } from '@/lib/words';
-import examples from '@/public/words.json';
+import defaultWordsJsonl from '@/data/roads_P001.jsonl?raw';
+import {
+  audioFilename,
+  MAX_RECORDING_JSON_BYTES,
+  parseRecordingJson,
+} from '@/lib/recording';
 
 type Phase =
   | 'idle'
@@ -29,15 +34,18 @@ export default function Home() {
     audio: Blob;
     text: string;
   } | null>(null);
-  const [words, setWords] = useState<Word[]>(examples);
+  const [words, setWords] = useState<Word[]>(() =>
+    parseWords(defaultWordsJsonl, 'roads_P001.jsonl'),
+  );
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>('idle');
   const [message, setMessage] = useState('Ready when you are');
   const [seconds, setSeconds] = useState(0);
-  const [source, setSource] = useState('Everyday Korean');
+  const [source, setSource] = useState('roads_P001');
   const [audio, setAudio] = useState('');
   const [transcript, setTranscript] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  const recordingFile = useRef<HTMLInputElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const held = useRef<string | null>(null);
   const busy = useRef(false);
@@ -199,72 +207,7 @@ export default function Home() {
           setMessage('No audio captured. Hold a little longer and try again.');
           return;
         }
-        setAudio(URL.createObjectURL(blob));
-        setPhase('sending');
-        setMessage('Sending your recording…');
-        const data = new FormData();
-        data.append(
-          'audio',
-          blob,
-          `recording.${blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm'}`,
-        );
-        data.append('word', word.korean);
-        data.append('wordId', word.id);
-        data.append('purpose', step);
-        if (step === 'practice' && voiceSample) {
-          data.append(
-            'referenceAudio',
-            voiceSample.audio,
-            'greeting.' +
-              (voiceSample.audio.type.includes('mp4')
-                ? 'mp4'
-                : voiceSample.audio.type.includes('ogg')
-                  ? 'ogg'
-                  : 'webm'),
-          );
-          data.append('referenceText', voiceSample.text);
-        }
-        try {
-          const response = await fetch('/api/stt', {
-            method: 'POST',
-            body: data,
-            signal: AbortSignal.timeout(30000),
-          });
-          const result = (await response.json()) as {
-            error?: string;
-            transcript?: string | null;
-          };
-          if (!response.ok)
-            throw new Error(result.error || 'Upload failed. Please try again.');
-          if (mounted.current) {
-            if (step === 'greeting') {
-              setVoiceSample({ audio: blob, text: greeting });
-              setPhase('success');
-              setMessage('Greeting ready. Continue when you’re ready.');
-              return;
-            }
-            setTranscript(
-              typeof result.transcript === 'string' ? result.transcript : null,
-            );
-            setPhase('success');
-            setMessage(
-              typeof result.transcript === 'string'
-                ? 'Transcription complete'
-                : 'Recording received. Listen back or try again.',
-            );
-          }
-        } catch (error) {
-          if (mounted.current) {
-            setPhase('error');
-            setMessage(
-              error instanceof Error
-                ? error.message
-                : 'Could not send recording. Please try again.',
-            );
-          }
-        } finally {
-          busy.current = false;
-        }
+        await submitRecording(blob, greeting);
       };
       rec.start();
       recordingStart.current = Date.now();
@@ -284,6 +227,100 @@ export default function Home() {
       );
     }
   }
+  async function submitRecording(blob: Blob, referenceText: string) {
+    setAudio(URL.createObjectURL(blob));
+    setPhase('sending');
+    setMessage('Sending your recording…');
+    const data = new FormData();
+    data.append('audio', blob, audioFilename(blob, 'recording'));
+    data.append('word', step === 'greeting' ? referenceText : word.korean);
+    data.append('wordId', word.id);
+    data.append('purpose', step);
+    if (step === 'practice' && voiceSample) {
+      data.append(
+        'referenceAudio',
+        voiceSample.audio,
+        audioFilename(voiceSample.audio, 'reference'),
+      );
+      data.append('referenceText', voiceSample.text);
+    }
+    try {
+      const response = await fetch('/api/stt', {
+        method: 'POST',
+        body: data,
+        signal: AbortSignal.timeout(30000),
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        transcript?: string | null;
+      };
+      if (!response.ok)
+        throw new Error(result.error || 'Upload failed. Please try again.');
+      if (mounted.current) {
+        if (step === 'greeting') {
+          setGreeting(referenceText);
+          setVoiceSample({ audio: blob, text: referenceText });
+          setPhase('success');
+          setMessage('Greeting ready. Continue when you’re ready.');
+          return;
+        }
+        setTranscript(
+          typeof result.transcript === 'string' ? result.transcript : null,
+        );
+        setPhase('success');
+        setMessage(
+          typeof result.transcript === 'string'
+            ? 'Transcription complete'
+            : 'Recording received. Listen back or try again.',
+        );
+      }
+    } catch (error) {
+      if (mounted.current) {
+        setPhase('error');
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not send recording. Please try again.',
+        );
+      }
+    } finally {
+      busy.current = false;
+    }
+  }
+  async function importRecording(selected?: File) {
+    if (!selected || busy.current) return;
+    busy.current = true;
+    setPhase('sending');
+    setMessage('Reading recording JSON…');
+    try {
+      if (selected.size > MAX_RECORDING_JSON_BYTES)
+        throw new Error('JSON 파일은 14 MiB 이하여야 합니다.');
+      const parsed = parseRecordingJson(await selected.text(), step);
+      if (!mounted.current) return;
+      if (
+        parsed.audio.size +
+          (step === 'practice' ? (voiceSample?.audio.size ?? 0) : 0) >
+        9 * 1024 * 1024
+      )
+        throw new Error(
+          'Reference와 현재 녹음의 음성 데이터 합계는 9 MiB 이하여야 합니다.',
+        );
+      setTranscript(null);
+      setSeconds(0);
+      await submitRecording(parsed.audio, parsed.text ?? greeting);
+    } catch (error) {
+      if (mounted.current) {
+        setPhase('error');
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not read recording JSON.',
+        );
+      }
+    } finally {
+      busy.current = false;
+    }
+  }
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.code !== 'Space' || e.repeat || e.altKey || e.ctrlKey || e.metaKey)
@@ -291,7 +328,7 @@ export default function Home() {
       const target = e.target as HTMLElement;
       if (
         target.closest(
-          'input, textarea, select, audio, [contenteditable="true"], button:not([data-record])',
+          'input, textarea, select, audio, summary, a, [contenteditable="true"], button:not([data-record])',
         )
       )
         return;
@@ -358,7 +395,7 @@ export default function Home() {
       const parsed = parseWords(await selected.text(), selected.name);
       setWords(parsed);
       setIndex(0);
-      setSource(selected.name.replace(/\.(json|csv)$/i, ''));
+      setSource(selected.name.replace(/\.(jsonl|json|csv)$/i, ''));
       setPhase('idle');
       setMessage('Word list loaded. Ready when you are');
       setAudio('');
@@ -472,6 +509,66 @@ export default function Home() {
             <p className="keyboard-hint">
               or hold <kbd>Space</kbd> · release to send
             </p>
+            <Button
+              variant="outline"
+              disabled={locked}
+              onClick={() => recordingFile.current?.click()}
+            >
+              <Upload size={16} />
+              {step === 'greeting'
+                ? 'Upload reference JSON'
+                : 'Upload recording JSON'}
+            </Button>
+            <input
+              ref={recordingFile}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              aria-label={
+                step === 'greeting'
+                  ? 'Upload reference JSON'
+                  : 'Upload recording JSON'
+              }
+              onChange={(event) => {
+                void importRecording(event.target.files?.[0]);
+                event.target.value = '';
+              }}
+            />
+            <details className="recording-format">
+              <summary>JSON 포맷 안내</summary>
+              <p>
+                UTF-8 JSON 객체 하나를 업로드하세요. audioBase64와 mimeType은
+                필수이며, reference에는 실제 발화 문장인 text도
+                필수입니다(1~200자).
+              </p>
+              <pre>
+                {JSON.stringify(
+                  {
+                    mimeType: 'audio/wav',
+                    audioBase64: '<음성 파일 전체의 Base64 문자열>',
+                    ...(step === 'greeting' ? { text: '안녕' } : {}),
+                  },
+                  null,
+                  2,
+                )}
+              </pre>
+              <p>
+                audioBase64는 실제 음성 파일을 Base64로 인코딩한 문자열입니다.
+                예시의 꺾쇠 부분을 교체하고 data: 접두사, 공백, 줄바꿈은 넣지
+                마세요.
+              </p>
+              <p>
+                mimeType: audio/webm, audio/mp4, audio/ogg, audio/wav,
+                audio/mpeg(MP3). 파일의 실제 형식과 일치해야 합니다. JSON은 최대
+                14 MiB, 디코딩한 음성은 reference와 현재 녹음 합계 최대 9
+                MiB입니다.
+              </p>
+              <p>
+                {step === 'greeting'
+                  ? '업로드 성공 후 Start practice를 누르세요. 이 음성과 text가 이후 요청의 reference로 사용됩니다.'
+                  : `현재 단어 “${word.korean}”의 녹음을 업로드하세요. 저장된 reference가 자동으로 함께 전송됩니다. text는 사용하지 않습니다.`}
+              </p>
+            </details>
             <output className={`status ${phase}`} aria-live="polite">
               {phase === 'success' ? (
                 <Check size={15} />
@@ -568,8 +665,8 @@ export default function Home() {
             <input
               ref={file}
               type="file"
-              accept=".json,.csv"
-              aria-label="Import a JSON or CSV word list"
+              accept=".json,.jsonl,.csv"
+              aria-label="Import a JSON, JSONL or CSV word list"
               hidden
               onChange={(e) => {
                 void importFile(e.target.files?.[0]);
