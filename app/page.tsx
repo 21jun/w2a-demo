@@ -48,7 +48,7 @@ export default function Home() {
       ? {
           id: 'greeting',
           korean: greeting,
-          meaning: 'Your greeting / wake word',
+          meaning: '',
         }
       : words[index];
   const locked =
@@ -240,7 +240,7 @@ export default function Home() {
             if (step === 'greeting') {
               setVoiceSample({ audio: blob, text: greeting });
               setPhase('success');
-              setMessage('Greeting received. You’re ready for word practice.');
+              setMessage('Greeting ready. Continue when you’re ready.');
               return;
             }
             setTranscript(
@@ -250,7 +250,7 @@ export default function Home() {
             setMessage(
               typeof result.transcript === 'string'
                 ? 'Transcription complete'
-                : 'Recording received. Transcription is coming soon.',
+                : 'Recording received. Listen back or try again.',
             );
           }
         } catch (error) {
@@ -379,26 +379,9 @@ export default function Home() {
           </span>
           Wake2Adapt
         </Link>
-        <span className="header-caption">Your voice. One word at a time.</span>
+        <span className="header-caption">Voice practice</span>
       </header>
       <main>
-        <div className="intro">
-          <div className="eyebrow">
-            {step === 'greeting'
-              ? 'STEP 1 · VOICE SETUP'
-              : 'STEP 2 · WORD PRACTICE'}
-          </div>
-          <h1>
-            {step === 'greeting'
-              ? 'Start with a hello.'
-              : 'One word at a time.'}
-          </h1>
-          <p>
-            {step === 'greeting'
-              ? 'Record a greeting to use as your voice reference.'
-              : 'Read the word aloud. Hold to record, release to send.'}
-          </p>
-        </div>
         <section
           className="practice-card"
           aria-label={
@@ -408,20 +391,21 @@ export default function Home() {
           }
         >
           <div className="card-top">
-            <span className="collection">
-              <span className="blue-dot" />
-              {step === 'greeting' ? 'Your voice reference' : source}
-            </span>
-            <span className="count">
-              {step === 'greeting'
-                ? '01 / 02'
-                : `${String(index + 1).padStart(2, '0')} / ${String(words.length).padStart(2, '0')}`}
-            </span>
+            <h1>
+              {step === 'greeting' ? 'Record a greeting' : 'Word practice'}
+            </h1>
+            {step === 'practice' && (
+              <span className="count">
+                {index + 1} / {words.length}
+              </span>
+            )}
           </div>
+          <p className="card-description">
+            {step === 'greeting'
+              ? 'Say hello to set up your voice reference.'
+              : source}
+          </p>
           <div className="word-area">
-            <span className="word-label">
-              {step === 'greeting' ? 'SAY YOUR GREETING' : 'READ THIS WORD'}
-            </span>
             <h2
               lang={step === 'greeting' && greeting === 'Hello' ? 'en' : 'ko'}
             >
@@ -441,6 +425,7 @@ export default function Home() {
                       : 'greeting-choice'
                   }
                   aria-pressed={greeting === text}
+                  lang={text === 'Hello' ? 'en' : 'ko'}
                   disabled={locked}
                   onClick={() => changeGreeting(text)}
                 >
@@ -452,19 +437,6 @@ export default function Home() {
           <div
             className={`record-area ${phase === 'recording' ? 'is-recording' : ''}`}
           >
-            <div className="soundline" aria-hidden="true">
-              {Array.from({ length: 31 }, (_, i) => (
-                <i
-                  key={i}
-                  style={
-                    {
-                      '--bar': `${8 + ((i * 7) % 23)}px`,
-                      animationDelay: `${i * 0.045}s`,
-                    } as React.CSSProperties
-                  }
-                />
-              ))}
-            </div>
             <Button
               data-record
               className="record-button"
@@ -493,10 +465,12 @@ export default function Home() {
                   ? 'Sending…'
                   : phase === 'permission'
                     ? 'Waiting for microphone…'
-                    : 'Hold to record'}
+                    : audio
+                      ? 'Hold to record again'
+                      : 'Hold to record'}
             </Button>
             <p className="keyboard-hint">
-              or hold the <kbd>space bar</kbd>
+              or hold <kbd>Space</kbd> · release to send
             </p>
             <output className={`status ${phase}`} aria-live="polite">
               {phase === 'success' ? (
@@ -520,46 +494,32 @@ export default function Home() {
               />
             )}
           </div>
-          {step === 'practice' &&
-            (phase === 'sending' || phase === 'success' || audio) && (
-              <section
-                className="comparison"
-                aria-label="Transcription result"
-                aria-live="polite"
-              >
-                <div>
-                  <h3>Original word</h3>
-                  <p lang="ko">{word.korean}</p>
-                </div>
-                <div>
-                  <h3>Transcribed output</h3>
-                  {transcript !== null ? (
-                    <p lang="ko">{transcript || 'No speech detected'}</p>
-                  ) : (
-                    <p className="transcript-placeholder">
-                      {phase === 'sending'
-                        ? 'Waiting for transcription…'
-                        : phase === 'error'
-                          ? 'Transcription unavailable. Try recording again.'
-                          : 'Transcription isn’t connected yet.'}
-                    </p>
-                  )}
-                </div>
-              </section>
-            )}
+          {step === 'practice' && transcript !== null && (
+            <section
+              className="comparison"
+              aria-label="Transcription result"
+              aria-live="polite"
+            >
+              <div>
+                <h3>Original word</h3>
+                <p lang="ko">{word.korean}</p>
+              </div>
+              <div>
+                <h3>Transcription</h3>
+                <p lang={transcript ? 'ko' : 'en'}>
+                  {transcript || 'No speech detected'}
+                </p>
+              </div>
+            </section>
+          )}
           {step === 'greeting' ? (
             <div className="greeting-bottom">
-              <p>
-                {voiceSample
-                  ? 'Listen back or hold to record again.'
-                  : 'Hold the button or Space, then release to send.'}
-              </p>
               <Button
                 className="continue-button"
                 disabled={locked || !voiceSample}
                 onClick={continueToPractice}
               >
-                Continue to word practice
+                Start practice
                 <ArrowRight size={17} />
               </Button>
             </div>
@@ -574,48 +534,42 @@ export default function Home() {
                 <ArrowLeft size={17} />
                 Previous
               </Button>
-              <span className="word-position">
-                Word {index + 1} of {words.length}
-              </span>
               <Button
                 variant="ghost"
                 className="nav-button"
                 disabled={locked || index === words.length - 1}
                 onClick={() => move(1)}
               >
-                Next word
+                Next
                 <ArrowRight size={17} />
               </Button>
             </div>
           )}
         </section>
         {step === 'practice' && (
-          <div className="voice-reference">
-            <span>
-              <Check size={15} />
-              Greeting ready: <strong>{voiceSample?.text}</strong>
-            </span>
-            <Button variant="ghost" disabled={locked} onClick={redoGreeting}>
-              Record a new greeting
-            </Button>
-          </div>
-        )}
-        {step === 'practice' && (
-          <div className="below-card">
-            <span>Make it your own.</span>
+          <div className="practice-tools">
             <Button
               variant="ghost"
-              className="import-button"
+              className="tool-button"
+              disabled={locked}
+              onClick={redoGreeting}
+            >
+              Change greeting
+            </Button>
+            <Button
+              variant="ghost"
+              className="tool-button"
               disabled={locked}
               onClick={() => file.current?.click()}
             >
               <Upload size={15} />
-              Import words<span className="file-types">JSON / CSV</span>
+              Import words
             </Button>
             <input
               ref={file}
               type="file"
               accept=".json,.csv"
+              aria-label="Import a JSON or CSV word list"
               hidden
               onChange={(e) => {
                 void importFile(e.target.files?.[0]);
@@ -624,16 +578,10 @@ export default function Home() {
             />
           </div>
         )}
-        <p className="privacy-note">
-          Your greeting stays in this session and is sent with each word
-          recording.
-          <br />
-          Voice adaptation and transcription are not connected yet.
+        <p className="session-note">
+          Recordings stay in this session. Transcription is coming soon.
         </p>
       </main>
-      <footer>
-        Wake2Adapt · Your microphone is only on while you’re recording.
-      </footer>
     </div>
   );
 }

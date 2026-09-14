@@ -3,7 +3,8 @@
 Use Node.js 22.13+ (Node 24 recommended).
 
 ```sh
-npm install
+nvm use
+npm ci
 npm run dev
 ```
 
@@ -23,10 +24,16 @@ The greeting is not a continuously listening wake-word detector. Recording remai
 
 Practice responses return HTTP 202 with `{ status: "received", transcript: null, wordId, bytes, referenceReceived: true, adaptationStatus: "not_configured" }`. Implement your provider in `app/api/stt/route.ts` at the TODO. A provider must explicitly support reference-audio adaptation; supplying a greeting alone does not implement adaptation. Keep future provider credentials on the server.
 
+The result panel appears when the API returns a `transcript` string and displays it alongside the original Korean word. Return an empty string for no speech detected, or `null` while STT is unimplemented. Until then, users can record and listen back, with a brief “Transcription is coming soon” note. No sample transcription is fabricated.
+
+## Release checks
+
 ```sh
-npm run build
-npm run lint
-npx tsc --noEmit
+npm run check
 ```
 
-The result panel displays the original Korean word alongside `transcript` from the API. Return a string to display recognized speech, an empty string for no speech detected, or `null` while STT is unimplemented. No sample transcription is fabricated.
+This runs formatting, lint, TypeScript, the word-import and upload API tests, and the production build. GitHub Actions runs the same checks on pushes to `main` and pull requests with Node 24. No STT credentials are needed.
+
+Use `npm run format` to apply formatting. Generated output, local environment files, and TypeScript build caches are ignored by Git. The lint configuration keeps narrowly scoped exceptions for generated UI primitives whose roles, content, and label associations are supplied through composition, and the existing carousel’s effect synchronization. Application code retains the accessibility and React rules.
+
+After a successful build, `npm start` serves the production Worker locally. Sites deployment uses the project in `.openai/hosting.json` and the `dist/server` and `dist/client` build output; preserve that project ID when publishing updates. Keep future STT provider credentials in server-side environment variables.
