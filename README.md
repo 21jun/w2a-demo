@@ -1,4 +1,4 @@
-# Wake2Adapt — Voice practice
+# Wake2Adapt
 
 Use Node.js 22.13+ (Node 24 recommended).
 
