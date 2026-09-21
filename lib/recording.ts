@@ -8,6 +8,37 @@ const MIME_TYPES = [
   'audio/mpeg',
 ];
 
+const AUDIO_EXTENSIONS: Record<string, string> = {
+  webm: 'audio/webm',
+  mp4: 'audio/mp4',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  opus: 'audio/ogg',
+  wav: 'audio/wav',
+  mp3: 'audio/mpeg',
+  flac: 'audio/flac',
+};
+
+/** Validate a picked audio file and label it with a MIME type the upload API accepts.
+ * `otherBytes` is the audio already attached to the same request (the reference). */
+export function audioBlobFromFile(file: File, otherBytes = 0) {
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  const type = file.type.startsWith('audio/')
+    ? file.type
+    : AUDIO_EXTENSIONS[extension];
+  if (!type)
+    throw new Error(
+      '음성 파일(wav, m4a, mp3, webm, ogg, flac)만 업로드할 수 있습니다.',
+    );
+  if (!file.size) throw new Error('빈 음성 파일입니다.');
+  if (file.size + otherBytes > MAX_AUDIO_BYTES)
+    throw new Error(
+      'Reference와 현재 녹음의 음성 데이터 합계는 9 MiB 이하여야 합니다.',
+    );
+  return new Blob([file], { type });
+}
+
 export function parseRecordingJson(
   raw: string,
   purpose: 'greeting' | 'practice',
@@ -55,14 +86,16 @@ export function parseRecordingJson(
 }
 
 export function audioFilename(blob: Blob, name: string) {
-  const extension = blob.type.includes('mp4')
-    ? 'mp4'
-    : blob.type.includes('ogg')
-      ? 'ogg'
-      : blob.type.includes('wav')
-        ? 'wav'
-        : blob.type.includes('mpeg')
-          ? 'mp3'
-          : 'webm';
+  const extension = blob.type.includes('flac')
+    ? 'flac'
+    : blob.type.includes('mp4')
+      ? 'mp4'
+      : blob.type.includes('ogg')
+        ? 'ogg'
+        : blob.type.includes('wav')
+          ? 'wav'
+          : blob.type.includes('mpeg')
+            ? 'mp3'
+            : 'webm';
   return `${name}.${extension}`;
 }

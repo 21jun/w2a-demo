@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { parseWords, type Word } from '@/lib/words';
 import defaultWordsJsonl from '@/data/roads_P001.jsonl?raw';
 import {
+  audioBlobFromFile,
   audioFilename,
   MAX_RECORDING_JSON_BYTES,
   parseRecordingJson,
@@ -55,6 +56,7 @@ export default function Home() {
   const [asrIpa, setAsrIpa] = useState('');
   const file = useRef<HTMLInputElement>(null);
   const recordingFile = useRef<HTMLInputElement>(null);
+  const audioFile = useRef<HTMLInputElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const held = useRef<string | null>(null);
   const busy = useRef(false);
@@ -334,6 +336,39 @@ export default function Home() {
       busy.current = false;
     }
   }
+  async function importAudio(selected?: File) {
+    if (!selected || busy.current) return;
+    const text = greeting.trim();
+    if (step === 'greeting' && (!text || text.length > 200)) {
+      setPhase('error');
+      setMessage('Reference text에 실제 발화 문장을 1~200자로 입력하세요.');
+      return;
+    }
+    busy.current = true;
+    setPhase('sending');
+    setMessage('Reading audio file…');
+    try {
+      const blob = audioBlobFromFile(
+        selected,
+        step === 'practice' ? (voiceSample?.audio.size ?? 0) : 0,
+      );
+      if (!mounted.current) return;
+      clearResult();
+      setSeconds(0);
+      await submitRecording(blob, text);
+    } catch (error) {
+      if (mounted.current) {
+        setPhase('error');
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not read this audio file.',
+        );
+      }
+    } finally {
+      busy.current = false;
+    }
+  }
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.code !== 'Space' || e.repeat || e.altKey || e.ctrlKey || e.metaKey)
@@ -391,6 +426,15 @@ export default function Home() {
     setGreeting(value);
     setVoiceSample(null);
     resetRecording();
+  }
+  function editGreeting(value: string) {
+    if (busy.current) return;
+    setGreeting(value);
+    if (voiceSample) {
+      // the stored audio no longer matches the text, so it stops being a reference
+      setVoiceSample(null);
+      resetRecording();
+    }
   }
   function redoGreeting() {
     if (busy.current) return;
@@ -489,6 +533,27 @@ export default function Home() {
               ))}
             </div>
           )}
+          {step === 'greeting' && (
+            <div className="reference-text">
+              <label htmlFor="reference-text">
+                Reference text (spoken words)
+              </label>
+              <input
+                id="reference-text"
+                type="text"
+                lang="ko"
+                value={greeting}
+                maxLength={200}
+                disabled={locked}
+                placeholder="안녕"
+                onChange={(event) => editGreeting(event.target.value)}
+              />
+              <p>
+                업로드하거나 녹음한 음성과 이 문장이 같아야 합니다. 프리셋 대신
+                직접 입력해도 됩니다.
+              </p>
+            </div>
+          )}
           <div
             className={`record-area ${phase === 'recording' ? 'is-recording' : ''}`}
           >
@@ -537,6 +602,31 @@ export default function Home() {
                 ? 'Upload reference JSON'
                 : 'Upload recording JSON'}
             </Button>
+            <Button
+              variant="outline"
+              disabled={locked || (step === 'greeting' && !greeting.trim())}
+              onClick={() => audioFile.current?.click()}
+            >
+              <Upload size={16} />
+              {step === 'greeting'
+                ? 'Upload reference audio'
+                : 'Upload recording audio'}
+            </Button>
+            <input
+              ref={audioFile}
+              type="file"
+              accept="audio/*,.wav,.m4a,.mp3,.ogg,.flac,.webm"
+              hidden
+              aria-label={
+                step === 'greeting'
+                  ? 'Upload reference audio'
+                  : 'Upload recording audio'
+              }
+              onChange={(event) => {
+                void importAudio(event.target.files?.[0]);
+                event.target.value = '';
+              }}
+            />
             <input
               ref={recordingFile}
               type="file"
@@ -585,6 +675,13 @@ export default function Home() {
                 {step === 'greeting'
                   ? '업로드 성공 후 Start practice를 누르세요. 이 음성과 text가 이후 요청의 reference로 사용됩니다.'
                   : `현재 단어 “${word.korean}”의 녹음을 업로드하세요. 저장된 reference가 자동으로 함께 전송됩니다. text는 사용하지 않습니다.`}
+              </p>
+              <p>
+                Upload reference audio / Upload recording audio를 쓰면 JSON 없이
+                wav, m4a, mp3, webm, ogg, flac 파일을 그대로 올릴 수 있습니다.
+                {step === 'greeting'
+                  ? ' 이때 위의 Reference text가 발화 문장으로 함께 전송됩니다.'
+                  : ''}
               </p>
             </details>
             <output className={`status ${phase}`} aria-live="polite">

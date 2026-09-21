@@ -18,9 +18,17 @@ Use **Import words** to load JSON/JSONL/CSV for the current session. JSONL has o
 
 JSON accepts an array of `{ "id": "1", "korean": "안녕하세요", "meaning": "Hello" }` or an array of strings. CSV uses `korean` with optional `id` and `meaning` columns. The importer supports quoted fields, commas, and UTF-8 BOMs.
 
+## Reference and recording uploads
+
+The voice reference does not have to come from the microphone. On the setup screen, type the spoken sentence into **Reference text** (the preset 안녕 / Hello buttons just fill it in, and any 1–200 character sentence works), then use **Upload reference audio** to pick a `wav`, `m4a`, `mp3`, `webm`, `ogg` or `flac` file. The file and that text are submitted as the reference, exactly as a microphone recording would be, and playback works the same way. Editing the text after a reference is registered clears it, because the audio would no longer match.
+
+On the practice screen, **Upload recording audio** does the same for the current word, and the stored reference is attached automatically.
+
+Files are checked in the browser: an unsupported type is rejected, and the reference plus the current recording must stay within 9 MiB of audio (the API request limit is 10 MiB). A file whose type the browser leaves empty — common for `.m4a` — is labelled from its extension.
+
 ## Recording JSON uploads
 
-Both setup and word practice accept a JSON file through **Upload reference JSON** / **Upload recording JSON**, as an alternative to microphone recording. Open **JSON 포맷 안내** on either screen for the schema.
+Both setup and word practice also accept a JSON file through **Upload reference JSON** / **Upload recording JSON**, which carries the audio as Base64 — useful for scripted uploads. Open **JSON 포맷 안내** on either screen for the schema.
 
 Reference JSON (one UTF-8 object):
 

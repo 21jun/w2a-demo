@@ -150,6 +150,39 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.reference-text {
+  margin: -0.5rem 1.5rem 1.25rem;
+}
+
+.reference-text label {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #58677c;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.reference-text input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid #dce3ed;
+  border-radius: 0.625rem;
+  background: #fff;
+  font: inherit;
+}
+
+.reference-text input:disabled {
+  background: #f6f8fc;
+}
+
+.reference-text p {
+  margin: 0.4rem 0 0;
+  color: #58677c;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
 .greeting-choices {
   display: flex;
   justify-content: center;
@@ -345,6 +378,10 @@ kbd {
 @media (max-width: 480px) {
   .app-shell {
     padding-inline: 1rem;
+  }
+
+  .reference-text {
+    margin-inline: 1.25rem;
   }
 
   .header {
