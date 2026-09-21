@@ -1,4 +1,75 @@
 const MAX_BYTES = 10 * 1024 * 1024;
+// wake2adapt serving API (w2a-api/server.py). Unset W2A_API_URL keeps the demo standalone.
+const UPSTREAM_TIMEOUT_MS = 120_000;
+function env(name: string) {
+  const value = globalThis.process?.env?.[name];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+type RetrievedEntity = {
+  rank: number;
+  entity: string;
+  score: number;
+  distance: number;
+  ipa: string;
+};
+type UpstreamResult = {
+  asr_result?: unknown;
+  asr_ipa?: unknown;
+  asr_adaptation?: unknown;
+  domain?: unknown;
+  lexicon_size?: unknown;
+  retrieved?: unknown;
+  retr_entities?: unknown;
+  timing?: unknown;
+  detail?: unknown;
+};
+function retrievedFrom(value: unknown): RetrievedEntity[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, position) => {
+    if (typeof item !== 'object' || item === null) return [];
+    const hit = item as Record<string, unknown>;
+    if (typeof hit.entity !== 'string') return [];
+    return [
+      {
+        rank: typeof hit.rank === 'number' ? hit.rank : position + 1,
+        entity: hit.entity,
+        score: typeof hit.score === 'number' ? hit.score : 0,
+        distance: typeof hit.distance === 'number' ? hit.distance : 0,
+        ipa: typeof hit.ipa === 'string' ? hit.ipa : '',
+      },
+    ];
+  });
+}
+async function transcribeUpstream(
+  apiUrl: string,
+  audio: File,
+  referenceAudio: File,
+  referenceText: string,
+) {
+  const upstream = new FormData();
+  upstream.append('audio', audio, audio.name || 'recording');
+  upstream.append(
+    'ref_audio',
+    referenceAudio,
+    referenceAudio.name || 'reference',
+  );
+  upstream.append('ref_text', referenceText);
+  upstream.append('domain', env('W2A_DOMAIN') ?? 'roads');
+  upstream.append('top_k', env('W2A_TOP_K') ?? '10');
+  const response = await fetch(`${apiUrl.replace(/\/+$/, '')}/transcribe`, {
+    method: 'POST',
+    body: upstream,
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
+  const result = (await response.json()) as UpstreamResult;
+  if (!response.ok)
+    throw new Error(
+      typeof result.detail === 'string'
+        ? result.detail
+        : `Transcription service returned ${response.status}.`,
+    );
+  return result;
+}
 export async function POST(request: Request) {
   if (!request.headers.get('content-type')?.startsWith('multipart/form-data'))
     return Response.json(
@@ -16,6 +87,10 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Missing recording.' }, { status: 400 });
   const chunks: Uint8Array[] = [];
   let size = 0;
+  let audio: File;
+  let wordId: string;
+  let referenceAudio: File;
+  let referenceText: string;
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -39,17 +114,17 @@ export async function POST(request: Request) {
     const data = await new Response(body, {
       headers: { 'Content-Type': request.headers.get('content-type')! },
     }).formData();
-    const audio = data.get('audio');
+    const uploaded = data.get('audio');
     const word = data.get('word');
-    const wordId = data.get('wordId');
+    const uploadedId = data.get('wordId');
     if (
-      !(audio instanceof File) ||
-      !audio.size ||
-      !audio.type.startsWith('audio/') ||
+      !(uploaded instanceof File) ||
+      !uploaded.size ||
+      !uploaded.type.startsWith('audio/') ||
       typeof word !== 'string' ||
       !word.trim() ||
       word.length > 200 ||
-      typeof wordId !== 'string'
+      typeof uploadedId !== 'string'
     )
       return Response.json(
         { error: 'Provide an audio file, word, and wordId.' },
@@ -62,22 +137,22 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     if (purpose === 'greeting') {
-      // TODO: Optional enrollment with your future adaptation provider.
-      // The client retains the sample for this session; nothing is persisted here.
+      // The greeting is the 1-shot reference; it is replayed with every practice
+      // request instead of being enrolled or persisted here.
       return Response.json(
-        { status: 'received', purpose, bytes: audio.size },
+        { status: 'received', purpose, bytes: uploaded.size },
         { status: 202 },
       );
     }
-    const referenceAudio = data.get('referenceAudio');
-    const referenceText = data.get('referenceText');
+    const uploadedReference = data.get('referenceAudio');
+    const uploadedReferenceText = data.get('referenceText');
     if (
-      !(referenceAudio instanceof File) ||
-      !referenceAudio.size ||
-      !referenceAudio.type.startsWith('audio/') ||
-      typeof referenceText !== 'string' ||
-      !referenceText.trim() ||
-      referenceText.length > 200
+      !(uploadedReference instanceof File) ||
+      !uploadedReference.size ||
+      !uploadedReference.type.startsWith('audio/') ||
+      typeof uploadedReferenceText !== 'string' ||
+      !uploadedReferenceText.trim() ||
+      uploadedReferenceText.length > 200
     )
       return Response.json(
         {
@@ -86,8 +161,19 @@ export async function POST(request: Request) {
         },
         { status: 400 },
       );
-    // TODO: Send audio + referenceAudio + referenceText to an STT provider
-    // that supports voice adaptation. No recognition, adaptation, or storage yet.
+    audio = uploaded;
+    wordId = uploadedId;
+    referenceAudio = uploadedReference;
+    referenceText = uploadedReferenceText;
+  } catch {
+    return Response.json(
+      { error: 'Invalid recording upload.' },
+      { status: 400 },
+    );
+  }
+  const apiUrl = env('W2A_API_URL');
+  if (!apiUrl)
+    // No serving API configured: accept the upload without inventing a transcript.
     return Response.json(
       {
         status: 'received',
@@ -99,10 +185,38 @@ export async function POST(request: Request) {
       },
       { status: 202 },
     );
-  } catch {
+  try {
+    const result = await transcribeUpstream(
+      apiUrl,
+      audio,
+      referenceAudio,
+      referenceText,
+    );
+    return Response.json({
+      status: 'ok',
+      transcript:
+        typeof result.asr_result === 'string' ? result.asr_result : '',
+      asrIpa: typeof result.asr_ipa === 'string' ? result.asr_ipa : '',
+      wordId,
+      bytes: audio.size,
+      referenceReceived: true,
+      adaptationStatus:
+        result.asr_adaptation === true ? 'reference_audio' : 'zero_shot',
+      domain: typeof result.domain === 'string' ? result.domain : '',
+      lexiconSize:
+        typeof result.lexicon_size === 'number' ? result.lexicon_size : 0,
+      retrieved: retrievedFrom(result.retrieved),
+      timing: typeof result.timing === 'object' ? result.timing : null,
+    });
+  } catch (error) {
     return Response.json(
-      { error: 'Invalid recording upload.' },
-      { status: 400 },
+      {
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : 'Could not reach the transcription service.',
+      },
+      { status: 502 },
     );
   }
 }

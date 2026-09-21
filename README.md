@@ -55,13 +55,54 @@ For a practice file, change the input/output filenames and omit `text`. Upload t
 
 ## STT integration
 
-`POST /api/stt` receives multipart fields `audio` (File), `word`, `wordId`, and `purpose` (`greeting` or `practice`). Greeting uploads are validated and acknowledged. After a successful greeting upload, the browser retains its Blob and text in React memory for the current session. Every practice upload includes `referenceAudio` (File) and `referenceText`. Missing or invalid references are rejected. The combined multipart upload limit is 10 MB.
+`POST /api/stt` receives multipart fields `audio` (File), `word`, `wordId`, and `purpose` (`greeting` or `practice`). Greeting uploads are validated and acknowledged; the browser keeps the Blob and its text in React memory for the session. Every practice upload includes `referenceAudio` (File) and `referenceText`. Missing or invalid references are rejected. The combined multipart upload limit is 10 MB.
 
-The greeting is not a continuously listening wake-word detector. Recording remains hold-to-record. The sample is sent with each practice request so a future STT provider can use it for adaptation. The server does not persist audio or train/adapt a model. Reloading or leaving the page clears the sample and starts setup again. “Record a new greeting” discards the old reference and requires a new recording.
+Practice uploads are forwarded to the wake2adapt serving API (`../server.py`), which runs Qwen2.5-Omni with the greeting as its 1-shot reference and then retrieves the closest L2-KPNS entities by phonetic edit distance. Configure it in `.env` (gitignored, loaded by `npm run dev`):
 
-Practice responses return HTTP 202 with `{ status: "received", transcript: null, wordId, bytes, referenceReceived: true, adaptationStatus: "not_configured" }`. Implement your provider in `app/api/stt/route.ts` at the TODO. A provider must explicitly support reference-audio adaptation; supplying a greeting alone does not implement adaptation. Keep future provider credentials on the server.
+```sh
+W2A_API_URL=http://127.0.0.1:8000   # required; unset keeps the demo standalone
+W2A_DOMAIN=roads                    # roads | content | restaurants | stations | all
+W2A_TOP_K=10
+```
 
-The result panel appears when the API returns a `transcript` string and displays it alongside the original Korean word. Return an empty string for no speech detected, or `null` while STT is unimplemented. Until then, users can record and listen back, with a brief “Transcription is coming soon” note. No sample transcription is fabricated.
+Start the API first (see `../README.md`), then `npm run dev`. `wrangler dev` does not read the project-root `.env`; pass the same values with `--var W2A_API_URL:… W2A_TOP_K:…` when testing the production Worker with `npm start`.
+
+With `W2A_API_URL` set, a practice upload answers HTTP 200:
+
+```json
+{
+  "status": "ok",
+  "transcript": "상국안길",
+  "asrIpa": "saŋkukankil",
+  "wordId": "1",
+  "bytes": 75244,
+  "referenceReceived": true,
+  "adaptationStatus": "reference_audio",
+  "domain": "roads",
+  "lexiconSize": 200,
+  "retrieved": [
+    {
+      "rank": 1,
+      "entity": "상곡안길",
+      "score": 0.91,
+      "distance": 1,
+      "ipa": "saŋkokankil"
+    }
+  ],
+  "timing": {
+    "decode_s": 0.01,
+    "asr_s": 2.35,
+    "retrieval_s": 0.03,
+    "total_s": 2.39
+  }
+}
+```
+
+The result panel shows the transcription and its IPA next to the original word, followed by the ranked retrieval table; a hit equal to the practiced word is highlighted. `score` is 1 − (phoneme edit distance / longer IPA length), so 1.00 is an exact phonetic match.
+
+Without `W2A_API_URL` the route still validates the upload and answers HTTP 202 with `{ status: "received", transcript: null, …, adaptationStatus: "not_configured" }`; the UI then shows the "Transcription is coming soon" note instead of a fabricated result. If the API is unreachable or returns an error, the route answers HTTP 502 and the UI shows that message.
+
+The greeting is not a continuously listening wake-word detector. Recording remains hold-to-record, and the sample is sent with each practice request so the API can use it for 1-shot adaptation. Neither the demo nor the API persists audio or trains a model. Reloading or leaving the page clears the sample and starts setup again. "Record a new greeting" discards the old reference and requires a new recording. Keep any future provider credentials in server-side environment variables.
 
 ## Release checks
 

@@ -20,6 +20,13 @@ import {
   parseRecordingJson,
 } from '@/lib/recording';
 
+type RetrievedEntity = {
+  rank: number;
+  entity: string;
+  score: number;
+  distance: number;
+  ipa: string;
+};
 type Phase =
   | 'idle'
   | 'permission'
@@ -44,6 +51,8 @@ export default function Home() {
   const [source, setSource] = useState('roads_P001');
   const [audio, setAudio] = useState('');
   const [transcript, setTranscript] = useState<string | null>(null);
+  const [retrieved, setRetrieved] = useState<RetrievedEntity[]>([]);
+  const [asrIpa, setAsrIpa] = useState('');
   const file = useRef<HTMLInputElement>(null);
   const recordingFile = useRef<HTMLInputElement>(null);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -148,7 +157,7 @@ export default function Home() {
     setPhase('permission');
     setMessage('Allow microphone access to begin');
     setAudio('');
-    setTranscript(null);
+    clearResult();
     setSeconds(0);
     let stream: MediaStream | undefined;
     try {
@@ -253,6 +262,8 @@ export default function Home() {
       const result = (await response.json()) as {
         error?: string;
         transcript?: string | null;
+        asrIpa?: string;
+        retrieved?: RetrievedEntity[];
       };
       if (!response.ok)
         throw new Error(result.error || 'Upload failed. Please try again.');
@@ -267,6 +278,8 @@ export default function Home() {
         setTranscript(
           typeof result.transcript === 'string' ? result.transcript : null,
         );
+        setRetrieved(Array.isArray(result.retrieved) ? result.retrieved : []);
+        setAsrIpa(typeof result.asrIpa === 'string' ? result.asrIpa : '');
         setPhase('success');
         setMessage(
           typeof result.transcript === 'string'
@@ -305,7 +318,7 @@ export default function Home() {
         throw new Error(
           'Reference와 현재 녹음의 음성 데이터 합계는 9 MiB 이하여야 합니다.',
         );
-      setTranscript(null);
+      clearResult();
       setSeconds(0);
       await submitRecording(parsed.audio, parsed.text ?? greeting);
     } catch (error) {
@@ -356,11 +369,16 @@ export default function Home() {
       document.removeEventListener('visibilitychange', hidden);
     };
   });
+  function clearResult() {
+    setTranscript(null);
+    setRetrieved([]);
+    setAsrIpa('');
+  }
   function resetRecording() {
     setPhase('idle');
     setMessage('Ready when you are');
     setAudio('');
-    setTranscript(null);
+    clearResult();
     setSeconds(0);
   }
   function continueToPractice() {
@@ -386,7 +404,7 @@ export default function Home() {
     setPhase('idle');
     setMessage('Ready when you are');
     setAudio('');
-    setTranscript(null);
+    clearResult();
     setSeconds(0);
   }
   async function importFile(selected?: File) {
@@ -399,7 +417,7 @@ export default function Home() {
       setPhase('idle');
       setMessage('Word list loaded. Ready when you are');
       setAudio('');
-      setTranscript(null);
+      clearResult();
     } catch (e) {
       setPhase('error');
       setMessage(
@@ -606,7 +624,40 @@ export default function Home() {
                 <p lang={transcript ? 'ko' : 'en'}>
                   {transcript || 'No speech detected'}
                 </p>
+                {asrIpa && <p className="ipa">{asrIpa}</p>}
               </div>
+            </section>
+          )}
+          {step === 'practice' && retrieved.length > 0 && (
+            <section
+              className="retrieved"
+              aria-label="Retrieved entities"
+              aria-live="polite"
+            >
+              <h3>Retrieved entities</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Entity</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">IPA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {retrieved.map((hit) => (
+                    <tr
+                      key={`${hit.rank}-${hit.entity}`}
+                      className={hit.entity === word.korean ? 'match' : ''}
+                    >
+                      <td>{hit.rank}</td>
+                      <td lang="ko">{hit.entity}</td>
+                      <td>{hit.score.toFixed(2)}</td>
+                      <td className="ipa">{hit.ipa}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </section>
           )}
           {step === 'greeting' ? (

@@ -122,3 +122,96 @@ test('requires a usable greeting reference for word practice', async () => {
     assert.equal(response.status, 400);
   }
 });
+
+function practiceRequest() {
+  const data = new FormData();
+  data.append(
+    'audio',
+    new Blob(['sample'], { type: 'audio/webm' }),
+    'recording.webm',
+  );
+  data.append('word', '상곡안길');
+  data.append('wordId', '1');
+  data.append('purpose', 'practice');
+  data.append(
+    'referenceAudio',
+    new Blob(['greeting'], { type: 'audio/webm' }),
+    'greeting.webm',
+  );
+  data.append('referenceText', '안녕');
+  return new Request('http://localhost/api/stt', {
+    method: 'POST',
+    body: data,
+  });
+}
+async function withStubbedApi(fetchStub, run) {
+  const originalFetch = globalThis.fetch;
+  process.env.W2A_API_URL = 'http://api.test/';
+  globalThis.fetch = fetchStub;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.W2A_API_URL;
+  }
+}
+test('forwards practice uploads to the wake2adapt serving API', async () => {
+  const calls = [];
+  const result = await withStubbedApi(
+    (url, init) => {
+      calls.push({ url, body: init.body });
+      return Promise.resolve(
+        Response.json({
+          asr_result: '상국안길',
+          asr_ipa: 'saŋkukankil',
+          asr_adaptation: true,
+          domain: 'roads',
+          lexicon_size: 200,
+          retrieved: [
+            {
+              rank: 1,
+              entity: '상곡안길',
+              score: 0.91,
+              distance: 1,
+              ipa: 'saŋkokankil',
+            },
+          ],
+          retr_entities: ['상곡안길'],
+          timing: { total_s: 1.2 },
+        }),
+      );
+    },
+    async () => {
+      const response = await POST(practiceRequest());
+      assert.equal(response.status, 200);
+      return response.json();
+    },
+  );
+  assert.equal(calls[0].url, 'http://api.test/transcribe');
+  assert.equal(calls[0].body.get('ref_text'), '안녕');
+  assert.equal(calls[0].body.get('domain'), 'roads');
+  assert.equal(calls[0].body.get('top_k'), '10');
+  assert.ok(calls[0].body.get('audio') instanceof Blob);
+  assert.ok(calls[0].body.get('ref_audio') instanceof Blob);
+  assert.equal(result.transcript, '상국안길');
+  assert.equal(result.asrIpa, 'saŋkukankil');
+  assert.equal(result.adaptationStatus, 'reference_audio');
+  assert.equal(result.lexiconSize, 200);
+  assert.deepEqual(result.retrieved, [
+    {
+      rank: 1,
+      entity: '상곡안길',
+      score: 0.91,
+      distance: 1,
+      ipa: 'saŋkokankil',
+    },
+  ]);
+});
+test('reports an unreachable transcription service', async () => {
+  const response = await withStubbedApi(
+    () => Promise.reject(new Error('fetch failed')),
+    () => POST(practiceRequest()),
+  );
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).error, 'fetch failed');
+});
