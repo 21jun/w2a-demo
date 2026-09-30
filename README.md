@@ -19,6 +19,44 @@ Access over the public internet additionally requires routing, such as a deploye
 
 Microphone recording on another device requires HTTPS with a trusted certificate. Plain HTTP over a LAN IP can display the app and accept JSON uploads, but browser microphone access is unavailable.
 
+## HTTPS for microphone recording
+
+For the web server at `143.248.56.128`, generate a certificate whose Subject Alternative Name includes that IP. Install [mkcert](https://github.com/FiloSottile/mkcert#installation), then run:
+
+```sh
+npm run certs -- 143.248.56.128
+```
+
+This creates `.certs/cert.pem` (server certificate), `.certs/key.pem` (private server key), and `.certs/rootCA.pem` (public CA certificate). All of `.certs/` is ignored by Git. If generating on another machine, securely copy only `cert.pem` and `key.pem` to the web server's `.certs/` directory; restrict the private key to its owner (`chmod 600 .certs/key.pem`). Do not copy the generator's `rootCA-key.pem` to the server or client devices. Regenerate the certificate when the web server IP/hostname changes; additional names can be passed to `npm run certs --`.
+
+Enable HTTPS for `npm run dev` in the server's `.env`:
+
+```sh
+HTTPS_CERT_PATH=.certs/cert.pem
+HTTPS_KEY_PATH=.certs/key.pem
+```
+
+Restart the server, then open `https://143.248.56.128:3000` (or the actual port printed). Both certificate paths are required. They can be absolute paths, or paths relative to the project root. The API address remains `W2A_API_URL=http://143.248.56.128:8000`; the browser uses the HTTPS same-origin proxy.
+
+For the built server:
+
+```sh
+npm run build
+npm run start:https -- --port 3000
+```
+
+`start:https` uses the generated `.certs/cert.pem` and `.certs/key.pem`. For different certificate locations, use `npm start -- --local-protocol https --https-cert-path <certificate-path> --https-key-path <private-key-path>`. Keep the web server port open in its firewall; port 8000 is the separate ASR service. `npm start` without these options continues to use HTTP.
+
+A local CA is not automatically trusted on other devices. Install **the same `.certs/rootCA.pem` that signed the server certificate** as a trusted root on every device used for recording, then restart the browser. Bypassing a certificate warning is not a substitute for a trusted HTTPS connection.
+
+- macOS: import `rootCA.pem` into Keychain Access and set it to **Always Trust**, or run `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain .certs/rootCA.pem`. On the generator machine, `mkcert -install` does this (the locally downloaded fallback is `.certs/tools/mkcert -install`).
+- Windows: import `rootCA.pem` into **Trusted Root Certification Authorities** for the current user.
+- iPhone/iPad: install the certificate profile, then enable full trust under **Settings → General → About → Certificate Trust Settings**.
+- Android: install it as a **CA certificate** in the device's security settings; exact menus and browser behavior vary by device.
+- Firefox may require importing the CA into its own certificate authorities store.
+
+After trust is installed, verify in the browser console that `window.isSecureContext` is `true` and `navigator.mediaDevices?.getUserMedia` is available. Allow microphone permission and use the recording button. These are development certificates; for public access without installing a CA on each device, use a certificate from a publicly trusted CA for your server address.
+
 ## Word lists
 
 The default practice list loads directly from `data/roads_P001.jsonl`, using each row’s `text` as the practice word in file order. Edit this file to change the default list (rebuild for production). Empty `audioBase64` values are allowed for word lists; they do not set a voice reference. Set up your reference by recording or uploading audio as before.

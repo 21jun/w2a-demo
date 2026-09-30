@@ -7,8 +7,10 @@
   },
   "scripts": {
     "dev": "vinext dev",
+    "certs": "node scripts/create-cert.mjs",
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json --ip 0.0.0.0",
+    "start:https": "wrangler dev --config dist/server/wrangler.json --ip 0.0.0.0 --local-protocol https --https-cert-path .certs/cert.pem --https-key-path .certs/key.pem",
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",

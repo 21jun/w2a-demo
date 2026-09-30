@@ -1,4 +1,6 @@
 import { sites } from '@openai/sites-vite-plugin';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig, loadEnv } from 'vite';
@@ -37,12 +39,23 @@ const localBindingConfig = {
 export default defineConfig(async ({ mode }) => {
   // Pass only the ASR settings to the Worker; root .env isn't read by
   // `wrangler dev --config dist/server/wrangler.json` after the build.
-  const fileEnv = loadEnv(mode, process.cwd(), 'W2A_');
+  const fileEnv = loadEnv(mode, process.cwd(), ['W2A_', 'HTTPS_']);
   const asrVars: Record<string, string> = {};
   for (const name of ['W2A_API_URL', 'W2A_DOMAIN', 'W2A_TOP_K']) {
     const value = process.env[name] ?? fileEnv[name];
     if (value?.trim()) asrVars[name] = value.trim();
   }
+  const certPath = process.env.HTTPS_CERT_PATH ?? fileEnv.HTTPS_CERT_PATH;
+  const keyPath = process.env.HTTPS_KEY_PATH ?? fileEnv.HTTPS_KEY_PATH;
+  if (Boolean(certPath) !== Boolean(keyPath))
+    throw new Error('Set both HTTPS_CERT_PATH and HTTPS_KEY_PATH.');
+  const https =
+    certPath && keyPath
+      ? {
+          cert: readFileSync(resolve(certPath)),
+          key: readFileSync(resolve(keyPath)),
+        }
+      : undefined;
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= 'false';
@@ -56,6 +69,7 @@ export default defineConfig(async ({ mode }) => {
     css: { postcss: { plugins: [tailwindcss()] } },
     server: {
       host: '0.0.0.0',
+      https,
       watch: isCodexSeatbeltSandbox
         ? { useFsEvents: false, usePolling: true }
         : undefined,
