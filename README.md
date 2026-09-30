@@ -5,6 +5,7 @@ Use Node.js 22.13+ (Node 24 recommended).
 ```sh
 nvm use
 npm ci
+cp .env.example .env
 npm run dev
 ```
 
@@ -73,15 +74,19 @@ For a practice file, change the input/output filenames and omit `text`. Upload t
 
 `POST /api/stt` receives multipart fields `audio` (File), `word`, `wordId`, and `purpose` (`greeting` or `practice`). Greeting uploads are validated and acknowledged; the browser keeps the Blob and its text in React memory for the session. Every practice upload includes `referenceAudio` (File) and `referenceText`. Missing or invalid references are rejected. The combined multipart upload limit is 10 MB.
 
-Practice uploads are forwarded to the wake2adapt serving API (`../server.py`), which runs Qwen2.5-Omni with the greeting as its 1-shot reference and then retrieves the closest L2-KPNS entities by phonetic edit distance. Configure it in `.env` (gitignored, loaded by `npm run dev`):
+Practice uploads are forwarded to the wake2adapt serving API (`../server.py`), which runs Qwen2.5-Omni with the greeting as its 1-shot reference and then retrieves the closest L2-KPNS entities by phonetic edit distance. Configure it in `.env` (gitignored, loaded by `npm run dev`); `.env.example` points to the current ASR server:
 
 ```sh
-W2A_API_URL=http://127.0.0.1:8000   # required; unset keeps the demo standalone
+W2A_API_URL=http://143.248.56.128:8000  # required; unset keeps the demo standalone
 W2A_DOMAIN=roads                    # roads | content | restaurants | stations | all
 W2A_TOP_K=10
 ```
 
-Start the API first (see `../README.md`), then `npm run dev`. `wrangler dev` does not read the project-root `.env`; pass the same values with `--var W2A_API_URL:… W2A_TOP_K:…` when testing the production Worker with `npm start`.
+The API must be listening on port 8000 and reachable from the web server. Restart `npm run dev` after changing the environment. To test the built Worker, use `npm run build` followed by `npm start`: `vite.config.ts` includes only `W2A_API_URL`, `W2A_DOMAIN`, and `W2A_TOP_K` in the generated Worker configuration during the build. Rebuild after changing `.env`, or explicitly override with `npm start -- --var W2A_API_URL:http://143.248.56.128:8000 --var W2A_DOMAIN:roads --var W2A_TOP_K:10`. For a hosted Worker, set these variables in its runtime environment; local environment files themselves are not hosted runtime configuration.
+
+The request path is `browser → same-origin /api/stt → http://143.248.56.128:8000/transcribe`. The proxy sends `audio`, `ref_audio`, `ref_text`, `domain`, and `top_k` as multipart form data, matching the serving API's OpenAPI contract. Do not call the ASR IP directly from the browser: with the proxy, ASR CORS headers are unnecessary and an HTTPS page does not make a browser-side HTTP fetch. External microphone access still requires HTTPS for the web page. The proxy waits up to 120 seconds for ASR; the browser waits 150 seconds for the full upload and response.
+
+Check connectivity from the web server with `curl http://143.248.56.128:8000/health`; expect `status: "ok"` and `asr_loaded: true`. `GET /openapi.json` documents the API's fields. A health check alone does not verify audio inference; send a practice recording with the reference through `/api/stt` to verify the full path.
 
 With `W2A_API_URL` set, a practice upload answers HTTP 200:
 

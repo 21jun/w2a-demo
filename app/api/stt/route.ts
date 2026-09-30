@@ -68,6 +68,8 @@ async function transcribeUpstream(
         ? result.detail
         : `Transcription service returned ${response.status}.`,
     );
+  if (typeof result.asr_result !== 'string')
+    throw new Error('Transcription service returned an invalid asr_result.');
   return result;
 }
 export async function POST(request: Request) {

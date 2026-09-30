@@ -259,7 +259,8 @@ export default function Home() {
       const response = await fetch('/api/stt', {
         method: 'POST',
         body: data,
-        signal: AbortSignal.timeout(30000),
+        // Allow the proxy's 120-second ASR timeout plus upload/response time.
+        signal: AbortSignal.timeout(150000),
       });
       const result = (await response.json()) as {
         error?: string;

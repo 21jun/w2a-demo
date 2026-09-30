@@ -1,7 +1,7 @@
 import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import hostingConfig from './.openai/hosting.json';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
@@ -34,7 +34,15 @@ const localBindingConfig = {
     : [],
 };
 
-export default defineConfig(async () => {
+export default defineConfig(async ({ mode }) => {
+  // Pass only the ASR settings to the Worker; root .env isn't read by
+  // `wrangler dev --config dist/server/wrangler.json` after the build.
+  const fileEnv = loadEnv(mode, process.cwd(), 'W2A_');
+  const asrVars: Record<string, string> = {};
+  for (const name of ['W2A_API_URL', 'W2A_DOMAIN', 'W2A_TOP_K']) {
+    const value = process.env[name] ?? fileEnv[name];
+    if (value?.trim()) asrVars[name] = value.trim();
+  }
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= 'false';
@@ -57,7 +65,7 @@ export default defineConfig(async () => {
       sites(),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-        config: localBindingConfig,
+        config: { ...localBindingConfig, vars: asrVars },
       }),
     ],
   };

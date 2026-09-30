@@ -215,3 +215,24 @@ test('reports an unreachable transcription service', async () => {
   assert.equal(response.status, 502);
   assert.equal((await response.json()).error, 'fetch failed');
 });
+
+test('rejects successful ASR responses with a missing transcript instead of showing no speech', async () => {
+  const response = await withStubbedApi(
+    () => Promise.resolve(Response.json({ renamed_transcript: '안녕' })),
+    () => POST(practiceRequest()),
+  );
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).error, /invalid asr_result/);
+});
+
+test('reports upstream HTTP errors to the practice UI', async () => {
+  const response = await withStubbedApi(
+    () =>
+      Promise.resolve(
+        Response.json({ detail: 'Could not decode audio' }, { status: 400 }),
+      ),
+    () => POST(practiceRequest()),
+  );
+  assert.equal(response.status, 502);
+  assert.equal((await response.json()).error, 'Could not decode audio');
+});
