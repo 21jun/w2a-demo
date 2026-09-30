@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
-    "start": "wrangler dev --config dist/server/wrangler.json",
+    "start": "wrangler dev --config dist/server/wrangler.json --ip 0.0.0.0",
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",

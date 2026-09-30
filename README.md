@@ -10,6 +10,14 @@ npm run dev
 
 Open the local URL printed by the server. First choose a greeting (안녕 or Hello), record it, then continue to word practice. You can listen back or re-record before continuing. Microphone recording requires localhost or HTTPS. Allow microphone access, then hold the record button (mouse/touch) or Space and release to upload. If the permission dialog interrupts the first hold, hold again after allowing access. Recordings stop at 60 seconds, when the window loses focus, or when the tab is hidden. Audio playback is available after recording.
 
+## Access from other devices
+
+Both `npm run dev` and `npm start` listen on `0.0.0.0` (all network interfaces). Restart an already running server after changing this configuration. From another device on the same network, open `http://<server-LAN-IP>:<port>` using the port printed by the server. `0.0.0.0` is the bind address, not the address to enter in the browser. Allow inbound connections to that port in the host firewall if needed.
+
+Access over the public internet additionally requires routing, such as a deployed HTTPS site or an HTTPS reverse proxy/tunnel; the bind setting alone does not configure the router. For a custom development hostname, set Vite's `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS` environment variable to the exact hostname. IP addresses are accepted by default.
+
+Microphone recording on another device requires HTTPS with a trusted certificate. Plain HTTP over a LAN IP can display the app and accept JSON uploads, but browser microphone access is unavailable.
+
 ## Word lists
 
 The default practice list loads directly from `data/roads_P001.jsonl`, using each row’s `text` as the practice word in file order. Edit this file to change the default list (rebuild for production). Empty `audioBase64` values are allowed for word lists; they do not set a voice reference. Set up your reference by recording or uploading audio as before.
