@@ -9,7 +9,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open the local URL printed by the server. First choose a greeting (안녕 or Hello), record it, then continue to word practice. You can listen back or re-record before continuing. Microphone recording requires localhost or HTTPS. Allow microphone access, then hold the record button (mouse/touch) or Space and release to upload. If the permission dialog interrupts the first hold, hold again after allowing access. Recordings stop at 60 seconds, when the window loses focus, or when the tab is hidden. Audio playback is available after recording.
+Open the local URL printed by the server. First choose a greeting (안녕 or Hello), record it, then continue to word practice. You can listen back or re-record before continuing. Microphone recording requires localhost or HTTPS. Allow microphone access, then hold the record button (mouse/touch) or Space and release to upload. If the permission dialog interrupts the first hold, hold again after allowing access. Recordings stop at 60 seconds, when the window loses focus, or when the tab is hidden. Audio playback is available after recording. Completed microphone recordings are decoded in the browser and converted to a complete 16 kHz mono PCM16 WAV before upload, including the stored voice reference. Invalid or shorter-than-250-ms recordings are rejected before setup succeeds; hold for at least a second and speak before releasing. This avoids depending on the ASR server’s WebM/Opus container support. Uploaded audio/JSON files keep their original format.
 
 ## Access from other devices
 

@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { parseWords, type Word } from '@/lib/words';
 import defaultWordsJsonl from '@/data/roads_P001.jsonl?raw';
+import { recordingToWav } from '@/lib/wav';
 import {
   audioBlobFromFile,
   audioFilename,
@@ -211,14 +212,32 @@ export default function Home() {
           busy.current = false;
           return;
         }
-        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        const blob = new Blob(chunks, {
+          type: chunks[0]?.type || rec.mimeType || 'audio/webm',
+        });
         if (!blob.size) {
           busy.current = false;
           setPhase('error');
           setMessage('No audio captured. Hold a little longer and try again.');
           return;
         }
-        await submitRecording(blob, greeting);
+        setPhase('sending');
+        setMessage('Preparing your recording…');
+        try {
+          const wav = await recordingToWav(blob);
+          if (mounted.current) await submitRecording(wav, greeting);
+        } catch (error) {
+          if (mounted.current) {
+            setPhase('error');
+            setMessage(
+              error instanceof Error
+                ? error.message
+                : 'Could not prepare recording. Please record again.',
+            );
+          }
+        } finally {
+          busy.current = false;
+        }
       };
       rec.start();
       recordingStart.current = Date.now();
